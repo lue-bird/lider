@@ -1,6 +1,9 @@
 elm-stuff
 node_modules
+package-lock.json
 .cache
 dist
 .vscode
 zombie
+# in progress and might never release
+language
