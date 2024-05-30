@@ -5,7 +5,8 @@ import Arc2d
 import Color exposing (Color)
 import Length
 import Parameter1d
-import Point2d
+import Point2d exposing (Point2d)
+import Polygon2d exposing (Polygon2d)
 import Quantity
 import Svg.PathD as PathD
 import Web.Dom
@@ -120,10 +121,26 @@ points =
             )
 
 
-polygon : List { x : Float, y : Float } -> List (Web.Dom.Modifier future) -> Web.Dom.Node future
-polygon points_ additionalModifiers =
-    Web.Svg.element "polyline"
-        (points points_
+polygon : Polygon2d Length.Meters Float -> List (Web.Dom.Modifier future) -> Web.Dom.Node future
+polygon polygonGeometry additionalModifiers =
+    Web.Svg.element "path"
+        (Web.Dom.attribute "d"
+            (PathD.pathD
+                (case (polygonGeometry |> Polygon2d.outerLoop) :: (polygonGeometry |> Polygon2d.innerLoops) |> List.concat of
+                    [] ->
+                        []
+
+                    startPoint :: nextPoints ->
+                        PathD.M (startPoint |> Point2d.toTuple Length.inMeters)
+                            :: (nextPoints
+                                    |> List.map
+                                        (\inBetweenPoint ->
+                                            PathD.L (inBetweenPoint |> Point2d.toTuple Length.inMeters)
+                                        )
+                               )
+                            ++ [ PathD.Z ]
+                )
+            )
             :: additionalModifiers
         )
         []
