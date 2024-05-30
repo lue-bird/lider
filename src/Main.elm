@@ -89,7 +89,7 @@ initialInitializedState : InitializedState
 initialInitializedState =
     { windowSize = dummyWindowSize
     , randomness = Nothing
-    , shapes = []
+    , dockShapeCompositions = []
     , headDirection = Right
     , location = Point2d.fromMeters { x = 4, y = 5 }
     , lastSimulationTime = Time.millisToPosix 0
@@ -241,8 +241,8 @@ initializedInterface state =
             [ worldUi
             , controlsUi
             , playerUi
-            , state.shapes
-                |> List.map dockShapeUi
+            , state.dockShapeCompositions
+                |> List.map dockShapeCompositionUi
                 |> Web.Svg.element "g"
                     [ Svg.LocalExtra.scaled (worldSize.width / worldSizeCells.x)
                     ]
@@ -328,9 +328,20 @@ stateWithInitialRandomness ( initialRandomnessInt0, initialRandomnessInt1Up ) =
             initialSeed =
                 Random.Pcg.Extended.initialSeed initialRandomnessInt0 initialRandomnessInt1Up
 
-            ( generatedShapes, newSeed ) =
+            ( generatedDockShapeCompositions, newSeed ) =
                 Random.Pcg.Extended.step
-                    (Random.Pcg.Extended.list 1 (dockShapeGeneratorWithSubCount 70))
+                    (Random.Pcg.Extended.list 3 (dockShapeGeneratorWithSubCount 70)
+                        |> Random.Pcg.Extended.map
+                            (\dockShapeCompositions ->
+                                dockShapeCompositions
+                                    |> List.indexedMap
+                                        (\i dockShapeComposition ->
+                                            dockShapeComposition
+                                                |> dockShapeCompositionTranslateBy
+                                                    (Vector2d.fromMeters { x = -10 + 10 * i |> Basics.toFloat, y = 0 })
+                                        )
+                            )
+                    )
                     initialSeed
         in
         { state
@@ -339,14 +350,14 @@ stateWithInitialRandomness ( initialRandomnessInt0, initialRandomnessInt1Up ) =
                 , seed = newSeed
                 }
                     |> Just
-            , shapes = generatedShapes
+            , dockShapeCompositions = generatedDockShapeCompositions
         }
 
 
-dockShapeUi : DockShape -> Web.Dom.Node state_
-dockShapeUi =
-    \dockShape ->
-        dockShape.shapes
+dockShapeCompositionUi : DockShapeComposition -> Web.Dom.Node state_
+dockShapeCompositionUi =
+    \dockShapeComposition ->
+        dockShapeComposition.shapes
             |> List.map
                 (\shape ->
                     case shape.geometry of
@@ -494,7 +505,7 @@ type alias InitializedState =
                 { initial : ( Int, List Int )
                 , seed : Random.Pcg.Extended.Seed
                 }
-        , shapes : List DockShape
+        , dockShapeCompositions : List DockShapeComposition
         , headDirection : MainDirection
         , location : Point2d Length.Meters Float
         , lastSimulationTime : Time.Posix
@@ -503,15 +514,13 @@ type alias InitializedState =
         }
 
 
-type alias DockShape =
-    { shapes : List ArcShape
+type alias DockShapeComposition =
+    { shapes :
+        List
+            { geometry : ShapeGeometry
+            , color : Color
+            }
     , docks : List (LineSegment2d Length.Meters Float)
-    }
-
-
-type alias ArcShape =
-    { geometry : ShapeGeometry
-    , color : Color
     }
 
 
@@ -530,139 +539,191 @@ debugColorForSubCount =
             0.5
 
 
-dockShapeGeneratorWithSubCount : Int -> Random.Pcg.Extended.Generator DockShape
+shapeGeometryTranslateBy : Vector2d Length.Meters Float -> (ShapeGeometry -> ShapeGeometry)
+shapeGeometryTranslateBy displacement =
+    \shapeGeometry ->
+        case shapeGeometry of
+            LineSegmentShapeGeometry lineSegmentGeometry ->
+                lineSegmentGeometry
+                    |> LineSegment2d.translateBy displacement
+                    |> LineSegmentShapeGeometry
+
+            ArcShapeGeometry arcGeometry ->
+                arcGeometry
+                    |> Arc2d.translateBy displacement
+                    |> ArcShapeGeometry
+
+            ClosingRoundShapeGeometry arcGeometry ->
+                arcGeometry
+                    |> Arc2d.translateBy displacement
+                    |> ClosingRoundShapeGeometry
+
+
+shapeGeometryRotateAround : Point2d Length.Meters Float -> Angle -> (ShapeGeometry -> ShapeGeometry)
+shapeGeometryRotateAround pivotPoint angleToRotateBy =
+    \shapeGeometry ->
+        case shapeGeometry of
+            LineSegmentShapeGeometry lineSegmentGeometry ->
+                lineSegmentGeometry
+                    |> LineSegment2d.rotateAround pivotPoint angleToRotateBy
+                    |> LineSegmentShapeGeometry
+
+            ArcShapeGeometry arcGeometry ->
+                arcGeometry
+                    |> Arc2d.rotateAround pivotPoint angleToRotateBy
+                    |> ArcShapeGeometry
+
+            ClosingRoundShapeGeometry arcGeometry ->
+                arcGeometry
+                    |> Arc2d.rotateAround pivotPoint angleToRotateBy
+                    |> ClosingRoundShapeGeometry
+
+
+dockShapeCompositionTranslateBy : Vector2d Length.Meters Float -> (DockShapeComposition -> DockShapeComposition)
+dockShapeCompositionTranslateBy displacement =
+    \dockShape ->
+        { dockShape
+            | shapes =
+                dockShape.shapes
+                    |> List.map
+                        (\shape ->
+                            { shape
+                                | geometry =
+                                    shape.geometry |> shapeGeometryTranslateBy displacement
+                            }
+                        )
+        }
+
+
+dockShapeCompositionRotateAround : Point2d Length.Meters Float -> Angle -> (DockShapeComposition -> DockShapeComposition)
+dockShapeCompositionRotateAround pivotPoint angleToRotateBy =
+    \dockShape ->
+        { dockShape
+            | shapes =
+                dockShape.shapes
+                    |> List.map
+                        (\shape ->
+                            { shape
+                                | geometry =
+                                    shape.geometry |> shapeGeometryRotateAround pivotPoint angleToRotateBy
+                            }
+                        )
+        }
+
+
+dockShapeGeneratorWithSubCount : Int -> Random.Pcg.Extended.Generator DockShapeComposition
 dockShapeGeneratorWithSubCount subCount =
     if subCount <= 1 then
         dockShapeLeafRandomGenerator
             |> Random.Pcg.Extended.map
                 (\leaf ->
-                    { shapes = [ leaf.shape ], docks = leaf.docks }
+                    { shapes = [ { geometry = leaf.shapeGeometry, color = debugColorForSubCount 1 } ]
+                    , docks = leaf.docks |> listFilledToList
+                    }
                 )
 
     else
-        Random.Pcg.Extended.constant
-            (\soFar toCombineWith ->
-                { soFar = soFar, toCombineWith = toCombineWith }
-            )
-            |> Random.Pcg.Extended.andMap
-                (dockShapeGeneratorWithSubCount (subCount - 1))
-            |> Random.Pcg.Extended.andMap
-                dockShapeLeafRandomGenerator
+        dockShapeGeneratorWithSubCount (subCount - 1)
             |> Random.Pcg.Extended.andThen
-                (\parts ->
-                    case ( parts.soFar.docks, parts.toCombineWith.docks ) of
-                        ( [], _ ) ->
-                            Random.Pcg.Extended.constant parts.soFar
+                (\soFar ->
+                    case soFar.docks of
+                        [] ->
+                            Random.Pcg.Extended.constant soFar
 
-                        ( _, [] ) ->
-                            -- try a different toCombineWith shape
-                            Random.Pcg.Extended.constant parts.soFar
+                        soFarDock0 :: soFarDock1Up ->
+                            dockShapeLeafRandomGenerator
+                                |> Random.Pcg.Extended.andThen
+                                    (\toCombineWith ->
+                                        Random.Pcg.Extended.constant
+                                            (\soFarDock toCombineWithDock ->
+                                                let
+                                                    soFarDockAngle : Angle
+                                                    soFarDockAngle =
+                                                        case soFarDock |> LineSegment2d.direction of
+                                                            Just dockDirection ->
+                                                                dockDirection |> Direction2d.toAngle
 
-                        ( soFarDock0 :: soFarDock1Up, toCombineWithDock0 :: toCombineWithDock1Up ) ->
-                            Random.Pcg.Extended.constant
-                                (\soFarDock toCombineWithDock ->
-                                    let
-                                        soFarDockAngle : Angle
-                                        soFarDockAngle =
-                                            case soFarDock |> LineSegment2d.direction of
-                                                Just dockDirection ->
-                                                    dockDirection |> Direction2d.toAngle
+                                                            Nothing ->
+                                                                Angle.turns 0
 
-                                                Nothing ->
-                                                    Angle.turns 0
+                                                    toCombineWithDockAngle : Angle
+                                                    toCombineWithDockAngle =
+                                                        case toCombineWithDock |> LineSegment2d.direction of
+                                                            Just dockDirection ->
+                                                                dockDirection |> Direction2d.toAngle
 
-                                        toCombineWithDockAngle : Angle
-                                        toCombineWithDockAngle =
-                                            case toCombineWithDock |> LineSegment2d.direction of
-                                                Just dockDirection ->
-                                                    dockDirection |> Direction2d.toAngle
+                                                            Nothing ->
+                                                                Angle.turns 0
 
-                                                Nothing ->
-                                                    Angle.turns 0
+                                                    toCombineWithDisplacement : Vector2d Length.Meters Float
+                                                    toCombineWithDisplacement =
+                                                        soFarDock
+                                                            |> LineSegment2d.midpoint
+                                                            |> point2dToVector
+                                                            |> Vector2d.plus
+                                                                (toCombineWithDock
+                                                                    |> LineSegment2d.midpoint
+                                                                    |> point2dToVector
+                                                                    |> Vector2d.scaleBy -1
+                                                                )
 
-                                        toCombineWithDisplacement : Vector2d Length.Meters Float
-                                        toCombineWithDisplacement =
-                                            soFarDock
-                                                |> LineSegment2d.midpoint
-                                                |> point2dToVector
-                                                |> Vector2d.plus
-                                                    (toCombineWithDock
-                                                        |> LineSegment2d.midpoint
-                                                        |> point2dToVector
-                                                        |> Vector2d.scaleBy -1
+                                                    toCombineWithRotation : Angle
+                                                    toCombineWithRotation =
+                                                        -- point in the opposite direction
+                                                        soFarDockAngle
+                                                            |> Quantity.plus (Angle.turns 0.5)
+                                                            |> Quantity.minus toCombineWithDockAngle
+                                                            |> Angle.normalize
+                                                in
+                                                { shapes =
+                                                    { geometry =
+                                                        toCombineWith.shapeGeometry
+                                                            |> shapeGeometryTranslateBy toCombineWithDisplacement
+                                                            |> shapeGeometryRotateAround
+                                                                (soFarDock |> LineSegment2d.midpoint)
+                                                                toCombineWithRotation
+                                                    , color = debugColorForSubCount subCount
+                                                    }
+                                                        :: soFar.shapes
+                                                , docks =
+                                                    (toCombineWith.docks
+                                                        |> listFilledToList
+                                                        |> List.filter (\dock -> dock /= toCombineWithDock)
+                                                        |> List.map
+                                                            (\dock ->
+                                                                dock
+                                                                    |> LineSegment2d.translateBy toCombineWithDisplacement
+                                                                    |> LineSegment2d.rotateAround
+                                                                        (soFarDock |> LineSegment2d.midpoint)
+                                                                        toCombineWithRotation
+                                                            )
                                                     )
-
-                                        toCombineWithRotation : Angle
-                                        toCombineWithRotation =
-                                            -- point in the opposite direction
-                                            soFarDockAngle
-                                                |> Quantity.plus (Angle.turns 0.5)
-                                                |> Quantity.minus toCombineWithDockAngle
-                                                |> Angle.normalize
-                                    in
-                                    { shapes =
-                                        { geometry =
-                                            case parts.toCombineWith.shape.geometry of
-                                                LineSegmentShapeGeometry lineSegmentGeometry ->
-                                                    lineSegmentGeometry
-                                                        |> LineSegment2d.translateBy toCombineWithDisplacement
-                                                        |> LineSegment2d.rotateAround
-                                                            (soFarDock |> LineSegment2d.midpoint)
-                                                            toCombineWithRotation
-                                                        |> LineSegmentShapeGeometry
-
-                                                ArcShapeGeometry arcGeometry ->
-                                                    arcGeometry
-                                                        |> Arc2d.translateBy toCombineWithDisplacement
-                                                        |> Arc2d.rotateAround
-                                                            (soFarDock |> LineSegment2d.midpoint)
-                                                            toCombineWithRotation
-                                                        |> ArcShapeGeometry
-
-                                                ClosingRoundShapeGeometry arcGeometry ->
-                                                    arcGeometry
-                                                        |> Arc2d.translateBy toCombineWithDisplacement
-                                                        |> Arc2d.rotateAround
-                                                            (soFarDock |> LineSegment2d.midpoint)
-                                                            toCombineWithRotation
-                                                        |> ClosingRoundShapeGeometry
-                                        , color = debugColorForSubCount subCount
-                                        }
-                                            :: parts.soFar.shapes
-                                    , docks =
-                                        ((toCombineWithDock0 :: toCombineWithDock1Up)
-                                            |> List.filter (\dock -> dock /= toCombineWithDock)
-                                            |> List.map
-                                                (\dock ->
-                                                    dock
-                                                        |> LineSegment2d.translateBy toCombineWithDisplacement
-                                                        |> LineSegment2d.rotateAround
-                                                            (soFarDock |> LineSegment2d.midpoint)
-                                                            toCombineWithRotation
+                                                        ++ ((soFarDock0 :: soFarDock1Up)
+                                                                |> List.filter (\dock -> dock /= soFarDock)
+                                                           )
+                                                }
+                                            )
+                                            |> Random.Pcg.Extended.andMap
+                                                (Random.Pcg.Extended.choices
+                                                    (Random.Pcg.Extended.constant soFarDock0)
+                                                    (soFarDock1Up |> List.map Random.Pcg.Extended.constant)
                                                 )
-                                        )
-                                            ++ ((soFarDock0 :: soFarDock1Up)
-                                                    |> List.filter (\dock -> dock /= soFarDock)
-                                               )
-                                    }
-                                )
-                                |> Random.Pcg.Extended.andMap
-                                    (Random.Pcg.Extended.choices
-                                        (Random.Pcg.Extended.constant soFarDock0)
-                                        (soFarDock1Up |> List.map Random.Pcg.Extended.constant)
-                                    )
-                                |> Random.Pcg.Extended.andMap
-                                    (Random.Pcg.Extended.choices
-                                        (Random.Pcg.Extended.constant toCombineWithDock0)
-                                        (toCombineWithDock1Up |> List.map Random.Pcg.Extended.constant)
+                                            |> Random.Pcg.Extended.andMap
+                                                (Random.Pcg.Extended.choices
+                                                    (Random.Pcg.Extended.constant (toCombineWith.docks |> listFilledHead))
+                                                    (toCombineWith.docks
+                                                        |> listFilledTail
+                                                        |> List.map Random.Pcg.Extended.constant
+                                                    )
+                                                )
                                     )
                 )
 
 
 dockShapeLeafRandomGenerator :
     Random.Pcg.Extended.Generator
-        { shape : ArcShape
-        , docks : List (LineSegment2d Length.Meters Float)
+        { shapeGeometry : ShapeGeometry
+        , docks : ListFilled (LineSegment2d Length.Meters Float)
         }
 dockShapeLeafRandomGenerator =
     Random.Pcg.Extended.choices
@@ -688,18 +749,16 @@ dockShapeLeafRandomGenerator =
                         arcGeometry
                             |> arcRadiusAlter (\r -> r |> Quantity.plus (Length.meters 0.5))
                 in
-                { shape =
-                    { geometry = arcGeometry |> ArcShapeGeometry
-                    , color = debugColorForSubCount 1
-                    }
+                { shapeGeometry = arcGeometry |> ArcShapeGeometry
                 , docks =
-                    [ LineSegment2d.from
+                    ( LineSegment2d.from
                         (arcInnerGeometry |> Arc2d.startPoint)
                         (arcOuterGeometry |> Arc2d.startPoint)
-                    , LineSegment2d.from
-                        (arcOuterGeometry |> Arc2d.endPoint)
-                        (arcInnerGeometry |> Arc2d.endPoint)
-                    ]
+                    , [ LineSegment2d.from
+                            (arcOuterGeometry |> Arc2d.endPoint)
+                            (arcInnerGeometry |> Arc2d.endPoint)
+                      ]
+                    )
                 }
             )
             |> Random.Pcg.Extended.andMap
@@ -722,18 +781,16 @@ dockShapeLeafRandomGenerator =
                             (Quantity.negate (radius |> Quantity.half))
                             (radius |> Quantity.half)
                 in
-                { shape =
-                    { geometry = lineSegmentGeometry |> LineSegmentShapeGeometry
-                    , color = debugColorForSubCount 1
-                    }
+                { shapeGeometry = lineSegmentGeometry |> LineSegmentShapeGeometry
                 , docks =
-                    [ LineSegment2d.from
+                    ( LineSegment2d.from
                         (lineSegmentGeometry |> LineSegment2d.startPoint |> Point2d.translateBy (Vector2d.fromMeters { x = -0.5, y = 0 }))
                         (lineSegmentGeometry |> LineSegment2d.startPoint |> Point2d.translateBy (Vector2d.fromMeters { x = 0.5, y = 0 }))
-                    , LineSegment2d.from
-                        (lineSegmentGeometry |> LineSegment2d.endPoint |> Point2d.translateBy (Vector2d.fromMeters { x = 0.5, y = 0 }))
-                        (lineSegmentGeometry |> LineSegment2d.endPoint |> Point2d.translateBy (Vector2d.fromMeters { x = -0.5, y = 0 }))
-                    ]
+                    , [ LineSegment2d.from
+                            (lineSegmentGeometry |> LineSegment2d.endPoint |> Point2d.translateBy (Vector2d.fromMeters { x = 0.5, y = 0 }))
+                            (lineSegmentGeometry |> LineSegment2d.endPoint |> Point2d.translateBy (Vector2d.fromMeters { x = -0.5, y = 0 }))
+                      ]
+                    )
                 }
             )
             |> Random.Pcg.Extended.andMap
@@ -758,13 +815,10 @@ dockShapeLeafRandomGenerator =
                     radiusInMeters =
                         (dist |> Basics.toFloat) / 2
                 in
-                { shape =
-                    { geometry = arcGeometry |> ClosingRoundShapeGeometry
-                    , color = debugColorForSubCount 1
-                    }
+                { shapeGeometry = arcGeometry |> ClosingRoundShapeGeometry
                 , docks =
-                    List.range 1 dist
-                        |> List.map
+                    ( 1, List.range 2 dist )
+                        |> listFilledMap
                             (\end ->
                                 LineSegment2d.along Axis2d.x
                                     (Length.meters (-radiusInMeters + (end - 1 |> Basics.toFloat)))
@@ -812,3 +866,28 @@ arcRadiusAlter radiusChange =
                 ((arc |> Arc2d.radius |> radiusChange |> Length.inMeters)
                     / (arc |> Arc2d.radius |> Length.inMeters)
                 )
+
+
+type alias ListFilled a =
+    ( a, List a )
+
+
+listFilledMap : (a -> b) -> ListFilled a -> ListFilled b
+listFilledMap elementChange =
+    \( head, tail ) ->
+        ( head |> elementChange, tail |> List.map elementChange )
+
+
+listFilledHead : ListFilled a -> a
+listFilledHead =
+    \( head, _ ) -> head
+
+
+listFilledTail : ListFilled a -> List a
+listFilledTail =
+    \( _, tail ) -> tail
+
+
+listFilledToList : ListFilled a -> List a
+listFilledToList =
+    \( head, tail ) -> head :: tail
