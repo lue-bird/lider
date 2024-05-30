@@ -50,31 +50,26 @@ Then open <http://localhost:5173/>
 
 ## conversation ideas
 
-Player selects dialog options even for characters <BIRD> speaks with. Emotions https://www.emotes.io/?unicode
-  - characters building trust by telling the truth. Then it gives you advice to choose between options that all just don't make sense
-  - thoughts of characters are displayed above their heads
-      - colored
-      - bold, styled, distorted, hypnotic
-      - background and font
-      - emotions like _doubt_, _anxiety_, _hope_, _despair_
-      - colors like _yellow_, _black_, _grey_ (the blandest and most deep color of all)
-      - too short on screen to read fully, not repeatable, to make you kind of frustrated you missed the lore
-      - sometimes _~_ wave if no thoughts
-  - repeated transitions, like _ ___ da daa da, da-dam!_
-  - talking past the player
-  - meet <LIVING>, then go in a direction.
-    <LIVING> appears again (???)
-  - when first sit on branch:
-    is it just just me or has my home's population just increased?
-      - <BIRD> [no options] people don't reply to rhetorical Qs.
-  - <NARRATOR> (TODO into dialog) points you to hopeful stuff prominent in safe spots etc in the world and tells you some other sad peep did this.
-    Later gets caught by the player placing symbols like that hopeful thing.
-    When it breaks down it hurts more
-  - rule of thumb
-    for every viewpoint you adapt you must be able to define a line where you step back from it
-    otherwise it becomes like a religion and you like a useful tool
-  - characters know your answers, even if you haven't even talked to them
+Player selects dialog options even for characters <BIRD> speaks with
+
+
+Thoughts of characters are displayed above their heads
+  - with pretty opaque colored background
+  - bold, styled, distorted, hypnotic
+  - emotions like _doubt_, _anxiety_, _hope_, _despair_, sometimes using emotes https://www.emotes.io/?unicode
+  - colors like _yellow_, _black_, _grey_ (the blandest and most deep color of all)
+  - intentionally too short on screen to read fully, not repeatable, to make you kind of frustrated you missed the lore
+  - sometimes _~_ wave if no thoughts
+
+Repeated transitions, like _ ___ da daa da, da-dam!_
+
+  - characters sometimes refer to your answers, even if you haven't even talked to them
   - first NPC
+      - <INTRODUCTION>
+        is it just just me or has my home's population just increased?
+      - <BIRD> [no options] people don't reply to rhetorical Qs.
+      - <INTRODUCTION>
+        don't be so stiff
       - <BIRD>
           - | how are you?
           - | more like who wants to know that
@@ -169,24 +164,50 @@ Player selects dialog options even for characters <BIRD> speaks with. Emotions h
         _pandas standing in a circle around a sand pit_
         _89 seconds       i like that one_
         _next, no commercials_
-  - time travel once convo
-      - <TIMTRAVE>
-        i could tell u stories about traveling back in time to prevent causing bad things
-        i could tell u stories about traveling back in time to not prevent causing bad things to restore good things that were caused by bad things
-        i was too afraid to travel in time anymore
+  - time travel hypothetical convo – on knowledge 0
+      - <TRAVE>
+        do you know these cheesy time travel stories,
+        like traveling back in time to prevent causing bad things
+        but later traveling back in time to not prevent causing bad things to restore good things that were caused by bad things
+        then being too afraid to travel in time anymore
       - <BIRD>
-        i take it that because of fear you limited your time-travel to as few times as possible?
-      - <TIMTRAVE>
-        i realized the same applies to you right now
+        i take it that because of fear they limited time travel to as few times as possible?
+      - <TRAVE>
+        i realized the same applies to us right now
         impact of actions must be undermined by an equal amount of proof/knowledge
-        ok, step back, easier terms
-        most actions cause harm even if they bring a lot of happiness as well
-        some actions necessarily cause harm which will keep the world from being rid of non-happiness
+  - on harm 0
+      - <TRAVE>
+        imagine a box of every good thing.
+        then taking out the worst things until only one item is left.
+        what you got?
+      - <BIRD>
+        | various pure forms of emotions like human care, respect and appreciation
+          - <TRAVE>
+            interesting. And a very sweet thing to say
+            Want a hug?
+          - <BIRD>
+            | ( ◡́.◡̀)\(^◡^ )
+            | I'll keep that offer in mind for when I need it, thank u
+        | something religious
+          - <TRAVE>
+            sounds like everything i've ever looked for
+            also sounds too good to be true
+            since we can never know something for sure i wouldn't bank on that
+            but if we only hoping all's good!
+        | u trying to say that every good thing has strings attached?
+          - <TRAVE>
+            i mean i guess we agree that all actions necessarily cause harm which will keep the world from being rid of non-happiness.
+            doesn't mean much but hey
   - undecided convo
       - <OKE>
         TODO resigned story
       - <BIRD>
         any dreams, any aspirations you had for life?
+      - <OKE>
+        TODO talking past the player
+      - <BIRD>
+        i don't care.
+        and again: had any dreams, any aspirations for life?
       - <OKE>
         i wanted to be somebody
       - <BIRD>
@@ -210,11 +231,14 @@ Player selects dialog options even for characters <BIRD> speaks with. Emotions h
         | disable
         | keep enabled
   - befriend
+      - meet REN
       - <REN>
         let's do fishing _⸜(｡˃ ᵕ ˂ )⸝_
         _𓆝 𓆟 𓆞 𓆝 𓆟_
       - <REN> _( •◡-)-♡_
           - <BIRD> _(⸝⸝ᵕᴗᵕ⸝⸝)_
+      - BIRD goes in a direction
+      - REN appears again in that direction (???)
       - <REN> why don't you join in? _(˵ •̀ ᴗ - ˵ ) ✧_
       - <REN> _(✿☉｡☉)_
       - <REN>
@@ -225,52 +249,50 @@ Player selects dialog options even for characters <BIRD> speaks with. Emotions h
         hmph _"૮₍ ˶•⤙•˶ ₎ა_
         I swear you'll get that back _"૮₍ •⤙•˶_
       - <REN> _i'm stuffed _(◍•ᴗ•◍)__
-  - <TODO> just ate. please clean up the {blood}. Then we can talk
-  - small hints of sadness and anger towards <BIRD> in previous conversations
-      - where did <> go?
-      - _other euphemisms for death of acquaintances_
-  - <BIRD (DEAD HUNGRY)>
+  - NPCs give small hints of sadness and anger towards BIRD in previous conversations
+      - where did <...> go? and _other euphemisms for death of acquaintances_
+  - <BIRD>
     i want to live
     ...
     i'm damn hungry
     gib food
     i'm starving
-    gib that one
-    _gib das da!_
+    gib that one!
     i'm starving
-    i'm hungryyyyy
+    hungryyyyy!
       - BIRD can fend off eating others multiple times
-      - BIRD only comes to know BIRD has eaten multiple others later like <REN>'s 
+      - <REN> does recognize your appearance but thinks you might just be disguised as you
+          - <BIRD> TODO you try to reason with them that you're the real 
+      - BIRD only comes to know BIRD has eaten multiple others later like from the same species as REN
+      - <BIRDFATHER>
+        just ate. please clean up the {blood}. Then we can talk
+        TODO convo
+      - <BIRD> 
         oh
-        
         that's brutally sad
         no matter what i do i hurt others more than i bring happiness
-
-
         and didn't i end a ton of lives just by having lived up until this point?
         _?_
         how come i never noticed
         _???_
         i knew i had the desire to
-
         _well, there are no memories_
-
-        _???_
-
         and, ...
 
         and i want to live
-          - self-report
-            die
-            hurt others in the process
-          - live
-            hurt others in the process
+        | die and hurt others in the process
+        | live and hurt others in the process
         _asking    asking   how #### feel_
         _ones labelled a burden to us_
         _ones labelled harmful to us   how they feel_
         _it's painful    it only matters to a fixed point   how they feel_
-  - <REN> does recognize your appearance but thinks you might just be disguised as you
-      - <BIRD> TODO you try to reason with them that you're the real you
+  - <NARRATOR>
+    (TODO into dialog) points you to hopeful stuff prominent in safe spots etc in the world and tells you some other sad peep did this.
+    Later gets caught by the player placing symbols like that hopeful thing.
+    When it breaks down it hurts more
+  - rule of thumb
+    for every viewpoint you adapt you must be able to define a line where you step back from it
+    otherwise it becomes like a religion and you like a useful tool
   - TODO include scarf = neck carpet, bouquet = tares, water = fried snow
   - TODO include This works most of the time... . . . so let's just round that up to all of the time and continue
   - ? names of characters and you change in first minor, sometimes major way based on influence and feelings
