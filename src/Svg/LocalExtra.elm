@@ -1,4 +1,4 @@
-module Svg.LocalExtra exposing (arc, circle, ellipse, fillUniform, line, polygon, polyline, rotated, scaled, strokeUniform, strokeWidth, translated)
+module Svg.LocalExtra exposing (arc, circle, closedArc, ellipse, fillUniform, line, polygon, polyline, rotated, scaled, strokeUniform, strokeWidth, translated)
 
 import Angle exposing (Angle)
 import Arc2d
@@ -187,6 +187,42 @@ arc arcGeometry modifiers =
             (PathD.pathD
                 (PathD.M (Arc2d.startPoint arcGeometry |> Point2d.toTuple Length.inMeters)
                     :: Parameter1d.trailing numSegments arcSegment
+                )
+            )
+            :: modifiers
+        )
+        []
+
+
+closedArc : Arc2d.Arc2d Length.Meters coordinates -> List (Web.Dom.Modifier future_) -> Web.Dom.Node future_
+closedArc arcGeometry modifiers =
+    let
+        maxSegmentAngle : Angle
+        maxSegmentAngle =
+            Angle.turns (1 / 3)
+
+        numSegments : Int
+        numSegments =
+            1 + floor (abs (Quantity.ratio (arcGeometry |> Arc2d.sweptAngle) maxSegmentAngle))
+
+        arcSegment : Float -> PathD.Segment
+        arcSegment parameterValue =
+            PathD.A
+                ( Arc2d.radius arcGeometry |> Length.inMeters
+                , Arc2d.radius arcGeometry |> Length.inMeters
+                )
+                0
+                False
+                (arcGeometry |> Arc2d.sweptAngle |> Quantity.greaterThanOrEqualTo Quantity.zero)
+                (Arc2d.pointOn arcGeometry parameterValue |> Point2d.toTuple Length.inMeters)
+    in
+    Web.Svg.element "path"
+        (Web.Dom.attribute "d"
+            (PathD.pathD
+                (PathD.M (arcGeometry |> Arc2d.centerPoint |> Point2d.toTuple Length.inMeters)
+                    :: PathD.L (Arc2d.startPoint arcGeometry |> Point2d.toTuple Length.inMeters)
+                    :: Parameter1d.trailing numSegments arcSegment
+                    ++ [ PathD.Z ]
                 )
             )
             :: modifiers
