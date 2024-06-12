@@ -14,12 +14,12 @@ import Length exposing (Length)
 import LineSegment2d exposing (LineSegment2d)
 import Parameter1d
 import Point2d exposing (Point2d)
-import Polygon2d exposing (Polygon2d)
+import Polygon2d
+import Polyline2d exposing (Polyline2d)
 import Quantity
 import Random.Pcg.Extended
 import RecordWithoutConstructorFunction exposing (RecordWithoutConstructorFunction)
 import Serialize
-import Set
 import Svg.LocalExtra
 import Svg.PathD as PathD
 import Time
@@ -309,7 +309,7 @@ stateWithInitialRandomness ( initialRandomnessInt0, initialRandomnessInt1Up ) =
 
             ( generatedDockShapeCompositions, newSeed ) =
                 Random.Pcg.Extended.step
-                    (Random.Pcg.Extended.list 2 (dockShapeGeneratorWithSubCount 70)
+                    (Random.Pcg.Extended.list 3 (dockShapeGeneratorWithSubCount 60)
                         |> Random.Pcg.Extended.map
                             (\dockShapeCompositions ->
                                 dockShapeCompositions
@@ -339,36 +339,77 @@ dockShapeCompositionUi =
         dockShapeComposition.shapes
             |> List.map
                 (\shape ->
-                    case shape.geometry of
-                        FilledArcShapeGeometry arcGeometry ->
-                            Svg.LocalExtra.closedArc arcGeometry
-                                [ Svg.LocalExtra.fillUniform shape.color
-                                ]
+                    Web.Svg.element "path"
+                        [ Web.Dom.attribute "d"
+                            (PathD.pathD
+                                (case shape.geometry of
+                                    [] ->
+                                        []
 
-                        PolygonShapeGeometry polygonGeometry ->
-                            Svg.LocalExtra.polygon
-                                polygonGeometry
-                                [ Svg.LocalExtra.fillUniform shape.color
-                                ]
-
-                        ArcOutlineShapeGeometry arcGeometry ->
-                            Svg.LocalExtra.arc arcGeometry
-                                [ Svg.LocalExtra.strokeUniform shape.color
-                                , Svg.LocalExtra.strokeWidth 1
-                                , Svg.LocalExtra.fillUniform colorInvisible
-                                ]
+                                    pathSegment0 :: pathSegment1Up ->
+                                        PathD.M (pathSegment0 |> shapePathSegmentStartPoint |> Point2d.toTuple Length.inMeters)
+                                            :: ((pathSegment0 :: pathSegment1Up)
+                                                    |> List.concatMap shapePathSegmentToPathD
+                                               )
+                                            ++ [ PathD.Z ]
+                                )
+                            )
+                        , Svg.LocalExtra.fillUniform shape.color
+                        ]
+                        []
                 )
             |> Web.Svg.element "g" []
+
+
+shapePathSegmentStartPoint : ShapePathSegment -> Point2d Length.Meters Float
+shapePathSegmentStartPoint =
+    \shapePathSegment ->
+        case shapePathSegment of
+            ShapePathSegmentLine line ->
+                line |> LineSegment2d.startPoint
+
+            ShapePathSegmentArc arc ->
+                arc |> Arc2d.startPoint
+
+
+shapePathSegmentToPathD : ShapePathSegment -> List PathD.Segment
+shapePathSegmentToPathD =
+    \shapePathSegment ->
+        case shapePathSegment of
+            ShapePathSegmentLine line ->
+                [ PathD.L (line |> LineSegment2d.endPoint |> Point2d.toTuple Length.inMeters) ]
+
+            ShapePathSegmentArc arc ->
+                pathDArc arc
+
+
+pathDArc : Arc2d.Arc2d Length.Meters coordinates -> List PathD.Segment
+pathDArc arcGeometry =
+    let
+        maxSegmentAngle : Angle
+        maxSegmentAngle =
+            Angle.turns (1 / 3)
+
+        numSegments : Int
+        numSegments =
+            1 + floor (abs (Quantity.ratio (arcGeometry |> Arc2d.sweptAngle) maxSegmentAngle))
+    in
+    Parameter1d.trailing numSegments
+        (\parameterValue ->
+            PathD.A
+                ( Arc2d.radius arcGeometry |> Length.inMeters
+                , Arc2d.radius arcGeometry |> Length.inMeters
+                )
+                0
+                False
+                (arcGeometry |> Arc2d.sweptAngle |> Quantity.greaterThanOrEqualTo Quantity.zero)
+                (Arc2d.pointOn arcGeometry parameterValue |> Point2d.toTuple Length.inMeters)
+        )
 
 
 worldSizeCells : { x : Float, y : Float }
 worldSizeCells =
     { x = 80, y = 45 }
-
-
-colorInvisible : Color
-colorInvisible =
-    Color.rgba 0 0 0 0
 
 
 directionFromKeyboardKey : Dict String MainDirection
@@ -464,7 +505,10 @@ appUrlToState =
         appUrl.queryParameters
             |> Dict.get ""
             |> Maybe.andThen List.head
-            |> Maybe.andThen (\str -> str |> Serialize.decodeFromString stateCodec |> Result.toMaybe)
+            |> Maybe.andThen
+                (\str ->
+                    str |> Serialize.decodeFromString stateCodec |> Result.toMaybe
+                )
 
 
 type State
@@ -499,10 +543,72 @@ type alias DockShapeComposition =
     }
 
 
-type ShapeGeometry
-    = ArcOutlineShapeGeometry (Arc2d Length.Meters Float)
-    | PolygonShapeGeometry (Polygon2d Length.Meters Float)
-    | FilledArcShapeGeometry (Arc2d Length.Meters Float)
+type alias ShapeGeometry =
+    List ShapePathSegment
+
+
+type ShapePathSegment
+    = ShapePathSegmentLine (LineSegment2d Length.Meters Float)
+    | ShapePathSegmentArc (Arc2d Length.Meters Float)
+
+
+shapeGeometriesOverlap : ShapeGeometry -> ShapeGeometry -> Maybe (Point2d Length.Meters Float)
+shapeGeometriesOverlap a b =
+    let
+        bSegments : List (LineSegment2d Length.Meters Float)
+        bSegments =
+            b |> shapePathApproximate |> Polyline2d.segments
+    in
+    a
+        |> shapePathApproximate
+        |> Polyline2d.segments
+        |> listFirstJustMap
+            (\aSegment ->
+                bSegments
+                    |> listFirstJustMap
+                        (\bSegment ->
+                            LineSegment2d.intersectionPoint aSegment bSegment
+                        )
+            )
+
+
+listFirstJustMap : (a -> Maybe b) -> (List a -> Maybe b)
+listFirstJustMap elementToMaybeFound =
+    \list ->
+        case list of
+            [] ->
+                Nothing
+
+            head :: tail ->
+                case elementToMaybeFound head of
+                    Just found ->
+                        Just found
+
+                    Nothing ->
+                        listFirstJustMap elementToMaybeFound tail
+
+
+shapePathApproximate : ShapeGeometry -> Polyline2d Length.Meters Float
+shapePathApproximate =
+    \pathSegments ->
+        let
+            points : List (Point2d Length.Meters Float)
+            points =
+                pathSegments
+                    |> List.concatMap
+                        (\segment ->
+                            case segment of
+                                ShapePathSegmentLine line ->
+                                    line |> LineSegment2d.endPoint |> List.singleton
+
+                                ShapePathSegmentArc arc ->
+                                    arc
+                                        |> Arc2d.approximate (Length.meters 0.4)
+                                        |> Polyline2d.vertices
+                                        |> List.drop 1
+                        )
+        in
+        Polyline2d.fromVertices points
 
 
 debugColorForSubCount : Int -> Color
@@ -517,41 +623,43 @@ debugColorForSubCount =
 shapeGeometryTranslateBy : Vector2d Length.Meters Float -> (ShapeGeometry -> ShapeGeometry)
 shapeGeometryTranslateBy displacement =
     \shapeGeometry ->
-        case shapeGeometry of
-            PolygonShapeGeometry lineSegmentGeometry ->
-                lineSegmentGeometry
-                    |> Polygon2d.translateBy displacement
-                    |> PolygonShapeGeometry
+        shapeGeometry |> List.map (\segment -> segment |> shapePathSegmentTranslateBy displacement)
 
-            ArcOutlineShapeGeometry arcGeometry ->
+
+shapePathSegmentTranslateBy : Vector2d Length.Meters Float -> (ShapePathSegment -> ShapePathSegment)
+shapePathSegmentTranslateBy displacement =
+    \segment ->
+        case segment of
+            ShapePathSegmentLine lineEndPoint ->
+                lineEndPoint
+                    |> LineSegment2d.translateBy displacement
+                    |> ShapePathSegmentLine
+
+            ShapePathSegmentArc arcGeometry ->
                 arcGeometry
                     |> Arc2d.translateBy displacement
-                    |> ArcOutlineShapeGeometry
-
-            FilledArcShapeGeometry arcGeometry ->
-                arcGeometry
-                    |> Arc2d.translateBy displacement
-                    |> FilledArcShapeGeometry
+                    |> ShapePathSegmentArc
 
 
 shapeGeometryRotateAround : Point2d Length.Meters Float -> Angle -> (ShapeGeometry -> ShapeGeometry)
 shapeGeometryRotateAround pivotPoint angleToRotateBy =
     \shapeGeometry ->
+        shapeGeometry |> List.map (\segment -> segment |> shapePathSegmentRotateAround pivotPoint angleToRotateBy)
+
+
+shapePathSegmentRotateAround : Point2d Length.Meters Float -> Angle -> (ShapePathSegment -> ShapePathSegment)
+shapePathSegmentRotateAround pivotPoint angleToRotateBy =
+    \shapeGeometry ->
         case shapeGeometry of
-            PolygonShapeGeometry polygonGeometry ->
-                polygonGeometry
-                    |> Polygon2d.rotateAround pivotPoint angleToRotateBy
-                    |> PolygonShapeGeometry
+            ShapePathSegmentLine lineEndPoint ->
+                lineEndPoint
+                    |> LineSegment2d.rotateAround pivotPoint angleToRotateBy
+                    |> ShapePathSegmentLine
 
-            ArcOutlineShapeGeometry arcGeometry ->
+            ShapePathSegmentArc arcGeometry ->
                 arcGeometry
                     |> Arc2d.rotateAround pivotPoint angleToRotateBy
-                    |> ArcOutlineShapeGeometry
-
-            FilledArcShapeGeometry arcGeometry ->
-                arcGeometry
-                    |> Arc2d.rotateAround pivotPoint angleToRotateBy
-                    |> FilledArcShapeGeometry
+                    |> ShapePathSegmentArc
 
 
 dockShapeCompositionTranslateBy : Vector2d Length.Meters Float -> (DockShapeComposition -> DockShapeComposition)
@@ -702,94 +810,91 @@ dockShapeLeafRandomGenerator :
         }
 dockShapeLeafRandomGenerator =
     Random.Pcg.Extended.choices
-        (Random.Pcg.Extended.constant
-            (\radius spanAngle ->
-                let
-                    arcGeometry : Arc2d Length.Meters Float
-                    arcGeometry =
-                        Arc2d.with
-                            { radius = radius
-                            , sweptAngle = spanAngle
-                            , centerPoint = Point2d.origin
-                            , startAngle = Angle.turns 0
-                            }
-
-                    arcInnerGeometry : Arc2d.Arc2d Length.Meters Float
-                    arcInnerGeometry =
-                        arcGeometry
-                            |> arcRadiusAlter (\r -> r |> Quantity.minus (Length.meters 0.5))
-
-                    arcOuterGeometry : Arc2d.Arc2d Length.Meters Float
-                    arcOuterGeometry =
-                        arcGeometry
-                            |> arcRadiusAlter (\r -> r |> Quantity.plus (Length.meters 0.5))
-                in
-                { shapeGeometry = arcGeometry |> ArcOutlineShapeGeometry
-                , docks =
-                    ( LineSegment2d.from
-                        (arcInnerGeometry |> Arc2d.startPoint)
-                        (arcOuterGeometry |> Arc2d.startPoint)
-                    , [ LineSegment2d.from
-                            (arcOuterGeometry |> Arc2d.endPoint)
-                            (arcInnerGeometry |> Arc2d.endPoint)
-                      ]
-                    )
-                }
-            )
-            |> Random.Pcg.Extended.andMap
-                (Random.Pcg.Extended.map Length.meters
-                    (Random.Pcg.Extended.int 1 5
-                        |> Random.Pcg.Extended.map Basics.toFloat
-                    )
-                )
-            |> Random.Pcg.Extended.andMap
-                (Random.Pcg.Extended.map Angle.turns
-                    (Random.Pcg.Extended.float 0.1 0.25)
-                )
-        )
+        arcOutlineDockShapeSegmentRandomGenerator
         [ lineDockShapeSegmentRandomGenerator
         , halfDiscDockShapeSegmentRandomGenerator
         , thirdDiscDockShapeSegmentRandomGenerator
         , quarterDiscDockShapeSegmentRandomGenerator
-        , equilateralTriangleDockShapeSegmentRandomGenerator
+        , equilateralPolygonDockShapeSegmentRandomGenerator
         ]
 
 
-halfDiscDockShapeSegmentRandomGenerator :
+arcOutlineDockShapeSegmentRandomGenerator :
     Random.Pcg.Extended.Generator
-        { shapeGeometry : ShapeGeometry
-        , docks : ListFilled (LineSegment2d Length.Meters Float)
+        { shapeGeometry : List ShapePathSegment
+        , docks : ( LineSegment2d Length.Meters Float, List (LineSegment2d Length.Meters Float) )
         }
-halfDiscDockShapeSegmentRandomGenerator =
+arcOutlineDockShapeSegmentRandomGenerator =
     Random.Pcg.Extended.constant
-        (\dist ->
+        (\radius spanAngle ->
             let
-                arcGeometry : Arc2d Length.Meters Float
-                arcGeometry =
+                arcGeometryWithRadius : Length -> Arc2d.Arc2d Length.Meters Float
+                arcGeometryWithRadius arcRadius =
                     Arc2d.with
-                        { radius = Length.meters radiusInMeters
-                        , sweptAngle = Angle.turns 0.5
+                        { radius = arcRadius
+                        , sweptAngle = spanAngle
                         , centerPoint = Point2d.origin
                         , startAngle = Angle.turns 0
                         }
 
-                radiusInMeters : Float
-                radiusInMeters =
-                    (dist |> Basics.toFloat) / 2
+                arcInnerGeometry : Arc2d.Arc2d Length.Meters Float
+                arcInnerGeometry =
+                    arcGeometryWithRadius (radius |> Quantity.minus (Length.meters 0.5))
+                        |> Arc2d.reverse
+
+                arcOuterGeometry : Arc2d.Arc2d Length.Meters Float
+                arcOuterGeometry =
+                    arcGeometryWithRadius (radius |> Quantity.plus (Length.meters 0.5))
+
+                startLine : LineSegment2d Length.Meters Float
+                startLine =
+                    LineSegment2d.from
+                        (arcInnerGeometry |> Arc2d.endPoint)
+                        (arcOuterGeometry |> Arc2d.startPoint)
+
+                endLine : LineSegment2d Length.Meters Float
+                endLine =
+                    LineSegment2d.from
+                        (arcOuterGeometry |> Arc2d.endPoint)
+                        (arcInnerGeometry |> Arc2d.startPoint)
             in
-            { shapeGeometry = arcGeometry |> FilledArcShapeGeometry
+            { shapeGeometry =
+                [ ShapePathSegmentArc arcOuterGeometry
+                , ShapePathSegmentLine endLine
+                , ShapePathSegmentArc arcInnerGeometry
+                , ShapePathSegmentLine startLine
+                ]
             , docks =
-                ( 1, List.range 2 dist )
-                    |> listFilledMap
-                        (\end ->
-                            LineSegment2d.along Axis2d.x
-                                (Length.meters (-radiusInMeters + (end - 1 |> Basics.toFloat)))
-                                (Length.meters (-radiusInMeters + (end |> Basics.toFloat)))
-                        )
+                ( startLine
+                , [ endLine ]
+                )
             }
         )
         |> Random.Pcg.Extended.andMap
-            (Random.Pcg.Extended.int 1 3)
+            (Random.Pcg.Extended.map Length.meters
+                (Random.Pcg.Extended.int 1 5
+                    |> Random.Pcg.Extended.map Basics.toFloat
+                )
+            )
+        |> Random.Pcg.Extended.andMap
+            (Random.Pcg.Extended.map Angle.turns
+                (Random.Pcg.Extended.float 0.1 0.25)
+            )
+
+
+lineSegment2dSubdivide : Int -> (LineSegment2d units coordinates -> List (LineSegment2d units coordinates))
+lineSegment2dSubdivide subdivisionCount =
+    \lineSegment ->
+        let
+            step : Float
+            step =
+                1 / (subdivisionCount |> Basics.toFloat)
+        in
+        Parameter1d.leading subdivisionCount
+            (\startPercentage ->
+                LineSegment2d.from (LineSegment2d.interpolate lineSegment startPercentage)
+                    (LineSegment2d.interpolate lineSegment (startPercentage + step))
+            )
 
 
 quarterDiscDockShapeSegmentRandomGenerator :
@@ -798,40 +903,7 @@ quarterDiscDockShapeSegmentRandomGenerator :
         , docks : ListFilled (LineSegment2d Length.Meters Float)
         }
 quarterDiscDockShapeSegmentRandomGenerator =
-    Random.Pcg.Extended.constant
-        (\radiusInMeters ->
-            let
-                arcGeometry : Arc2d Length.Meters Float
-                arcGeometry =
-                    Arc2d.with
-                        { radius = Length.meters (radiusInMeters |> Basics.toFloat)
-                        , sweptAngle = Angle.turns 0.25
-                        , centerPoint = Point2d.origin
-                        , startAngle = Angle.turns 0
-                        }
-            in
-            { shapeGeometry = arcGeometry |> FilledArcShapeGeometry
-            , docks =
-                ( 1, List.range 2 radiusInMeters )
-                    |> listFilledMap
-                        (\end ->
-                            LineSegment2d.along Axis2d.x
-                                (Length.meters (end - 1 |> Basics.toFloat))
-                                (Length.meters (end |> Basics.toFloat))
-                        )
-                    |> listFilledAttachList
-                        (List.range 1 radiusInMeters
-                            |> List.map
-                                (\end ->
-                                    LineSegment2d.along Axis2d.y
-                                        (Length.meters (end |> Basics.toFloat))
-                                        (Length.meters (end - 1 |> Basics.toFloat))
-                                )
-                        )
-            }
-        )
-        |> Random.Pcg.Extended.andMap
-            (Random.Pcg.Extended.int 1 2)
+    discDockShapeSegmentRandomGeneratorWithSpanAngle (Angle.turns (1.0 / 4.0))
 
 
 thirdDiscDockShapeSegmentRandomGenerator :
@@ -840,36 +912,66 @@ thirdDiscDockShapeSegmentRandomGenerator :
         , docks : ListFilled (LineSegment2d Length.Meters Float)
         }
 thirdDiscDockShapeSegmentRandomGenerator =
+    discDockShapeSegmentRandomGeneratorWithSpanAngle (Angle.turns (1.0 / 3.0))
+
+
+halfDiscDockShapeSegmentRandomGenerator :
+    Random.Pcg.Extended.Generator
+        { shapeGeometry : ShapeGeometry
+        , docks : ListFilled (LineSegment2d Length.Meters Float)
+        }
+halfDiscDockShapeSegmentRandomGenerator =
+    discDockShapeSegmentRandomGeneratorWithSpanAngle (Angle.turns (1.0 / 2.0))
+
+
+discDockShapeSegmentRandomGeneratorWithSpanAngle :
+    Angle
+    ->
+        Random.Pcg.Extended.Generator
+            { shapeGeometry : ShapeGeometry
+            , docks : ListFilled (LineSegment2d Length.Meters Float)
+            }
+discDockShapeSegmentRandomGeneratorWithSpanAngle spanAngle =
     Random.Pcg.Extended.constant
         (\radiusInMeters ->
             let
-                arcGeometry : Arc2d Length.Meters Float
+                arcGeometry : Arc2d Length.Meters coordinates
                 arcGeometry =
                     Arc2d.with
                         { radius = Length.meters (radiusInMeters |> Basics.toFloat)
-                        , sweptAngle = Angle.turns (1.0 / 3.0)
+                        , sweptAngle = spanAngle
                         , centerPoint = Point2d.origin
                         , startAngle = Angle.turns 0
                         }
+
+                arcCenterToStart : List (LineSegment2d Length.Meters coordinates)
+                arcCenterToStart =
+                    lineSegment2dSubdivide radiusInMeters
+                        (LineSegment2d.from
+                            (arcGeometry |> Arc2d.centerPoint)
+                            (arcGeometry |> Arc2d.startPoint)
+                        )
+
+                arcEndToCenter : List (LineSegment2d Length.Meters coordinates)
+                arcEndToCenter =
+                    lineSegment2dSubdivide radiusInMeters
+                        (LineSegment2d.from
+                            (arcGeometry |> Arc2d.endPoint)
+                            (arcGeometry |> Arc2d.centerPoint)
+                        )
             in
-            { shapeGeometry = arcGeometry |> FilledArcShapeGeometry
+            { shapeGeometry =
+                (arcCenterToStart |> List.map ShapePathSegmentLine)
+                    ++ [ arcGeometry |> ShapePathSegmentArc ]
+                    ++ (arcEndToCenter |> List.map ShapePathSegmentLine)
             , docks =
-                ( 1, List.range 2 radiusInMeters )
-                    |> listFilledMap
-                        (\end ->
-                            LineSegment2d.along Axis2d.x
-                                (Length.meters (end - 1 |> Basics.toFloat))
-                                (Length.meters (end |> Basics.toFloat))
-                        )
-                    |> listFilledAttachList
-                        (List.range 1 radiusInMeters
-                            |> List.map
-                                (\end ->
-                                    LineSegment2d.along Axis2d.y
-                                        (Length.meters (end |> Basics.toFloat))
-                                        (Length.meters (end - 1 |> Basics.toFloat))
-                                )
-                        )
+                case arcCenterToStart ++ arcEndToCenter of
+                    head :: tail ->
+                        ( head, tail )
+
+                    -- dummy
+                    [] ->
+                        ( LineSegment2d.from Point2d.origin Point2d.origin, [] )
             }
         )
         |> Random.Pcg.Extended.andMap
@@ -904,14 +1006,32 @@ lineDockShapeSegmentRandomGenerator =
                 bottomLeft : Point2d Length.Meters coordinates
                 bottomLeft =
                     Point2d.fromMeters { x = -0.5, y = -halfLengthInMeters }
+
+                bottomSide : LineSegment2d Length.Meters coordinates
+                bottomSide =
+                    LineSegment2d.from bottomLeft bottomRight
+
+                rightSide : LineSegment2d Length.Meters coordinates
+                rightSide =
+                    LineSegment2d.from bottomRight topRight
+
+                topSide : LineSegment2d Length.Meters coordinates
+                topSide =
+                    LineSegment2d.from topRight topLeft
+
+                leftSide : LineSegment2d Length.Meters coordinates
+                leftSide =
+                    LineSegment2d.from topLeft bottomLeft
             in
             { shapeGeometry =
-                Polygon2d.singleLoop [ bottomLeft, bottomRight, topRight, topLeft ]
-                    |> PolygonShapeGeometry
+                [ ShapePathSegmentLine bottomSide
+                , ShapePathSegmentLine rightSide
+                , ShapePathSegmentLine topSide
+                , ShapePathSegmentLine leftSide
+                ]
             , docks =
-                ( LineSegment2d.from bottomLeft bottomRight
-                , [ LineSegment2d.from topRight topLeft
-                  ]
+                ( bottomSide
+                , [ topSide ]
                 )
             }
         )
@@ -923,43 +1043,50 @@ lineDockShapeSegmentRandomGenerator =
             )
 
 
-equilateralTriangleDockShapeSegmentRandomGenerator :
+equilateralPolygonDockShapeSegmentRandomGenerator :
     Random.Pcg.Extended.Generator
         { shapeGeometry : ShapeGeometry
         , docks : ListFilled (LineSegment2d Length.Meters Float)
         }
-equilateralTriangleDockShapeSegmentRandomGenerator =
+equilateralPolygonDockShapeSegmentRandomGenerator =
     Random.Pcg.Extended.constant
-        (\longWidthInMeters ->
+        (\sideCount longWidthInMeters ->
             let
-                -- TODO allow scaling?
-                halfLongWidthInMeters : Float
-                halfLongWidthInMeters =
-                    (longWidthInMeters |> Basics.toFloat) / 2
+                polygonGeometry =
+                    Polygon2d.regular
+                        { centerPoint = Point2d.origin
+                        , circumradius =
+                            Length.meters
+                                (1
+                                    / (Basics.sin
+                                        (Basics.turns
+                                            (1 / (2 * (sideCount |> Basics.toFloat)))
+                                        )
+                                        * 2
+                                      )
+                                )
+                        , numSides = sideCount
+                        }
 
-                top : Point2d Length.Meters coordinates
-                top =
-                    Point2d.fromMeters { x = 0, y = sqrt 3 / 4 }
-
-                bottomRight : Point2d Length.Meters coordinates
-                bottomRight =
-                    Point2d.fromMeters { x = 0.5, y = -(sqrt 3) / 4 }
-
-                bottomLeft : Point2d Length.Meters coordinates
-                bottomLeft =
-                    Point2d.fromMeters { x = -0.5, y = -(sqrt 3) / 4 }
+                sides =
+                    (polygonGeometry |> Polygon2d.outerLoop) |> listConsecutiveMap LineSegment2d.from
             in
             { shapeGeometry =
-                Polygon2d.singleLoop [ top, bottomRight, bottomLeft ]
-                    |> PolygonShapeGeometry
+                sides |> List.map ShapePathSegmentLine
             , docks =
-                ( LineSegment2d.from bottomRight top
-                , [ LineSegment2d.from bottomLeft bottomRight
-                  , LineSegment2d.from top bottomLeft
-                  ]
-                )
+                case sides of
+                    side0 :: side1Up ->
+                        ( side0, side1Up )
+
+                    [] ->
+                        -- dummy for polygon with <= 1 vertices
+                        ( LineSegment2d.from Point2d.origin Point2d.origin
+                        , []
+                        )
             }
         )
+        |> Random.Pcg.Extended.andMap
+            (Random.Pcg.Extended.int 3 8)
         |> Random.Pcg.Extended.andMap
             (Random.Pcg.Extended.int 1 3)
 
@@ -999,6 +1126,12 @@ arcRadiusAlter radiusChange =
                 ((arc |> Arc2d.radius |> radiusChange |> Length.inMeters)
                     / (arc |> Arc2d.radius |> Length.inMeters)
                 )
+
+
+listConsecutiveMap : (a -> a -> b) -> List a -> List b
+listConsecutiveMap combineConsecutive =
+    \list ->
+        List.map2 combineConsecutive list (list |> List.drop 1)
 
 
 type alias ListFilled a =

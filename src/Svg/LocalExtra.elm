@@ -1,14 +1,11 @@
-module Svg.LocalExtra exposing (arc, circle, closedArc, ellipse, fillUniform, line, polygon, polyline, rotated, scaled, strokeUniform, strokeWidth, translated)
+module Svg.LocalExtra exposing (circle, ellipse, fillUniform, line, polygon, polyline, rotated, scaled, strokeUniform, strokeWidth, translated)
 
-import Angle exposing (Angle)
-import Arc2d
+import Angle
 import Color exposing (Color)
 import Length
-import Parameter1d
-import Point2d exposing (Point2d)
+import Point2d
 import Polygon2d exposing (Polygon2d)
-import Quantity
-import Svg.PathD as PathD
+import Svg.PathD
 import Web.Dom
 import Web.Svg
 
@@ -105,40 +102,24 @@ strokeUniform color =
     Web.Dom.attribute "stroke" (color |> Color.toCssString)
 
 
-points : List { x : Float, y : Float } -> Web.Dom.Modifier future_
-points =
-    \points_ ->
-        Web.Dom.attribute "points"
-            ((case points_ of
-                [ onlyElement ] ->
-                    [ onlyElement, onlyElement ]
-
-                notOnlyOne ->
-                    notOnlyOne
-             )
-                |> List.map (\point -> [ point.x |> String.fromFloat, ",", point.y |> String.fromFloat ] |> String.concat)
-                |> String.join " "
-            )
-
-
 polygon : Polygon2d Length.Meters Float -> List (Web.Dom.Modifier future) -> Web.Dom.Node future
 polygon polygonGeometry additionalModifiers =
     Web.Svg.element "path"
         (Web.Dom.attribute "d"
-            (PathD.pathD
+            (Svg.PathD.pathD
                 (case (polygonGeometry |> Polygon2d.outerLoop) :: (polygonGeometry |> Polygon2d.innerLoops) |> List.concat of
                     [] ->
                         []
 
                     startPoint :: nextPoints ->
-                        PathD.M (startPoint |> Point2d.toTuple Length.inMeters)
+                        Svg.PathD.M (startPoint |> Point2d.toTuple Length.inMeters)
                             :: (nextPoints
                                     |> List.map
                                         (\inBetweenPoint ->
-                                            PathD.L (inBetweenPoint |> Point2d.toTuple Length.inMeters)
+                                            Svg.PathD.L (inBetweenPoint |> Point2d.toTuple Length.inMeters)
                                         )
                                )
-                            ++ [ PathD.Z ]
+                            ++ [ Svg.PathD.Z ]
                 )
             )
             :: additionalModifiers
@@ -160,71 +141,17 @@ polyline points_ additionalModifiers =
         []
 
 
-arc : Arc2d.Arc2d Length.Meters coordinates -> List (Web.Dom.Modifier future_) -> Web.Dom.Node future_
-arc arcGeometry modifiers =
-    let
-        maxSegmentAngle : Angle
-        maxSegmentAngle =
-            Angle.turns (1 / 3)
+points : List { x : Float, y : Float } -> Web.Dom.Modifier future_
+points =
+    \points_ ->
+        Web.Dom.attribute "points"
+            ((case points_ of
+                [ onlyElement ] ->
+                    [ onlyElement, onlyElement ]
 
-        numSegments : Int
-        numSegments =
-            1 + floor (abs (Quantity.ratio (arcGeometry |> Arc2d.sweptAngle) maxSegmentAngle))
-
-        arcSegment : Float -> PathD.Segment
-        arcSegment parameterValue =
-            PathD.A
-                ( Arc2d.radius arcGeometry |> Length.inMeters
-                , Arc2d.radius arcGeometry |> Length.inMeters
-                )
-                0
-                False
-                (arcGeometry |> Arc2d.sweptAngle |> Quantity.greaterThanOrEqualTo Quantity.zero)
-                (Arc2d.pointOn arcGeometry parameterValue |> Point2d.toTuple Length.inMeters)
-    in
-    Web.Svg.element "path"
-        (Web.Dom.attribute "d"
-            (PathD.pathD
-                (PathD.M (Arc2d.startPoint arcGeometry |> Point2d.toTuple Length.inMeters)
-                    :: Parameter1d.trailing numSegments arcSegment
-                )
+                notOnlyOne ->
+                    notOnlyOne
+             )
+                |> List.map (\point -> [ point.x |> String.fromFloat, ",", point.y |> String.fromFloat ] |> String.concat)
+                |> String.join " "
             )
-            :: modifiers
-        )
-        []
-
-
-closedArc : Arc2d.Arc2d Length.Meters coordinates -> List (Web.Dom.Modifier future_) -> Web.Dom.Node future_
-closedArc arcGeometry modifiers =
-    let
-        maxSegmentAngle : Angle
-        maxSegmentAngle =
-            Angle.turns (1 / 3)
-
-        numSegments : Int
-        numSegments =
-            1 + floor (abs (Quantity.ratio (arcGeometry |> Arc2d.sweptAngle) maxSegmentAngle))
-
-        arcSegment : Float -> PathD.Segment
-        arcSegment parameterValue =
-            PathD.A
-                ( Arc2d.radius arcGeometry |> Length.inMeters
-                , Arc2d.radius arcGeometry |> Length.inMeters
-                )
-                0
-                False
-                (arcGeometry |> Arc2d.sweptAngle |> Quantity.greaterThanOrEqualTo Quantity.zero)
-                (Arc2d.pointOn arcGeometry parameterValue |> Point2d.toTuple Length.inMeters)
-    in
-    Web.Svg.element "path"
-        (Web.Dom.attribute "d"
-            (PathD.pathD
-                (PathD.M (arcGeometry |> Arc2d.centerPoint |> Point2d.toTuple Length.inMeters)
-                    :: PathD.L (Arc2d.startPoint arcGeometry |> Point2d.toTuple Length.inMeters)
-                    :: Parameter1d.trailing numSegments arcSegment
-                    ++ [ PathD.Z ]
-                )
-            )
-            :: modifiers
-        )
-        []
