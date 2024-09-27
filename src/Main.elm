@@ -25,15 +25,6 @@ import Svg.PathD as PathD
 import Time
 import Vector2d exposing (Vector2d)
 import Web
-import Web.Audio
-import Web.Audio.Parameter
-import Web.Dom
-import Web.Gamepads
-import Web.Navigation
-import Web.Random
-import Web.Svg
-import Web.Time
-import Web.Window
 
 
 main : Web.Program State
@@ -48,7 +39,7 @@ programConfig =
         \stateChoice ->
             case stateChoice of
                 WaitingForInitialUrl ->
-                    Web.Navigation.urlRequest
+                    Web.urlRequest
                         |> Web.interfaceFutureMap
                             (\initialUrl ->
                                 case initialUrl |> appUrlToState of
@@ -61,8 +52,8 @@ programConfig =
 
                 Initialized initialized ->
                     [ initialized |> initializedInterface
-                    , Web.Navigation.pushUrl (initialized |> stateToAppUrl)
-                    , Web.Navigation.movementListen
+                    , Web.pushUrl (initialized |> stateToAppUrl)
+                    , Web.navigationListen
                         |> Web.interfaceFutureMap
                             (\newUrl ->
                                 case newUrl |> appUrlToState of
@@ -111,31 +102,31 @@ initializedInterface state =
             Web.interfaceNone
 
         Nothing ->
-            Web.Random.unsignedInt32s 4
+            Web.randomUnsignedInt32s 4
                 |> Web.interfaceFutureMap InitialRandomnessReceived
     , case state.flapAudio of
         Just (Ok flapAudioSource) ->
             state.flapTimes
                 |> List.map
                     (\flapAudio ->
-                        Web.Audio.fromSource flapAudioSource flapAudio.time
-                            |> Web.Audio.speedScaleBy
-                                (Web.Audio.Parameter.at
+                        Web.audioFromSource flapAudioSource flapAudio.time
+                            |> Web.audioSpeedScaleBy
+                                (Web.audioParameterAt
                                     (2 ^ ((flapAudio.nthPickedApple |> Basics.toFloat) * 0.01))
                                 )
                     )
-                |> List.map Web.Audio.play
+                |> List.map Web.audioPlay
                 |> Web.interfaceBatch
 
         _ ->
-            Web.Audio.sourceLoad "flap.mp3"
+            Web.audioSourceLoad "flap.mp3"
                 |> Web.interfaceFutureMap FlapAudioReceived
-    , Web.Time.periodicallyListen (Duration.milliseconds 16)
+    , Web.timePeriodicallyListen (Duration.milliseconds 16)
         |> Web.interfaceFutureMap SimulationTick
-    , [ Web.Window.sizeRequest, Web.Window.resizeListen ]
+    , [ Web.windowSizeRequest, Web.windowResizeListen ]
         |> Web.interfaceBatch
         |> Web.interfaceFutureMap WindowSizeReceived
-    , Web.Window.listenTo "keydown"
+    , Web.windowListenTo "keydown"
         |> Web.interfaceFutureMap
             (\event ->
                 event
@@ -143,7 +134,7 @@ initializedInterface state =
                         (Json.Decode.field "key" Json.Decode.string)
                     |> KeyPressed
             )
-    , [ Web.Gamepads.request, Web.Gamepads.changeListen ]
+    , [ Web.gamepadsRequest, Web.gamepadsChangeListen ]
         |> Web.interfaceBatch
         |> Web.interfaceFutureMap
             (\gamepads ->
@@ -151,36 +142,36 @@ initializedInterface state =
                     (gamepads |> Dict.foldr (\_ gamepad _ -> gamepad |> Just) Nothing)
             )
     , let
-        worldUi : Web.Dom.Node state_
+        worldUi : Web.DomNode state_
         worldUi =
-            Web.Svg.element "rect"
+            Web.svgElement "rect"
                 [ Svg.LocalExtra.fillUniform Color.black
-                , Web.Dom.attribute "width" "100%"
-                , Web.Dom.attribute "height" "100%"
+                , Web.domAttribute "width" "100%"
+                , Web.domAttribute "height" "100%"
                 ]
                 []
 
-        playerUi : Web.Dom.Node future_
+        playerUi : Web.DomNode future_
         playerUi =
             -- TODO
             []
-                |> Web.Svg.element "g" []
+                |> Web.svgElement "g" []
 
-        controlsUi : Web.Dom.Node state_
+        controlsUi : Web.DomNode state_
         controlsUi =
-            Web.Svg.element "text"
+            Web.svgElement "text"
                 [ Svg.LocalExtra.fillUniform (Color.rgb 0.3 0.7 0.5)
-                , Web.Dom.style "font-size" "3em"
-                , Web.Dom.attribute "text-anchor" "middle"
-                , Web.Dom.attribute "dominant-baseline" "middle"
-                , Web.Dom.attribute "font-weight" "bolder"
-                , Web.Dom.attribute "x" "50%"
-                , Web.Dom.attribute "y" "8%"
-                , Web.Dom.attribute "width" "50%"
-                , Web.Dom.attribute "height" "50%"
+                , Web.domStyle "font-size" "3em"
+                , Web.domAttribute "text-anchor" "middle"
+                , Web.domAttribute "dominant-baseline" "middle"
+                , Web.domAttribute "font-weight" "bolder"
+                , Web.domAttribute "x" "50%"
+                , Web.domAttribute "y" "8%"
+                , Web.domAttribute "width" "50%"
+                , Web.domAttribute "height" "50%"
                 ]
                 [ "arrow keys or left controller thumbstick"
-                    |> Web.Dom.text
+                    |> Web.domText
                 ]
 
         worldSize : { width : Float, height : Float }
@@ -202,31 +193,31 @@ initializedInterface state =
                 , height = state.windowSize.height |> Basics.toFloat
                 }
       in
-      Web.Dom.element "div"
-        [ Web.Dom.style "background-color" (Color.rgb 0.05 0.05 0.05 |> Color.toCssString)
-        , Web.Dom.style "position" "fixed"
-        , Web.Dom.style "top" "0"
-        , Web.Dom.style "right" "0"
-        , Web.Dom.style "bottom" "0"
-        , Web.Dom.style "left" "0"
+      Web.domElement "div"
+        [ Web.domStyle "background-color" (Color.rgb 0.05 0.05 0.05 |> Color.toCssString)
+        , Web.domStyle "position" "fixed"
+        , Web.domStyle "top" "0"
+        , Web.domStyle "right" "0"
+        , Web.domStyle "bottom" "0"
+        , Web.domStyle "left" "0"
         ]
-        [ Web.Svg.element "svg"
-            [ Web.Dom.attribute "viewBox" ([ "0 0 ", worldSize.width |> String.fromFloat, " ", worldSize.height |> String.fromFloat ] |> String.concat)
-            , Web.Dom.attribute "width" ((worldSize.width |> String.fromFloat) ++ "px")
-            , Web.Dom.attribute "height" ((worldSize.height |> String.fromFloat) ++ "px")
-            , Web.Dom.style "display" "block"
-            , Web.Dom.style "margin" "auto"
+        [ Web.svgElement "svg"
+            [ Web.domAttribute "viewBox" ([ "0 0 ", worldSize.width |> String.fromFloat, " ", worldSize.height |> String.fromFloat ] |> String.concat)
+            , Web.domAttribute "width" ((worldSize.width |> String.fromFloat) ++ "px")
+            , Web.domAttribute "height" ((worldSize.height |> String.fromFloat) ++ "px")
+            , Web.domStyle "display" "block"
+            , Web.domStyle "margin" "auto"
             ]
             [ worldUi
             , controlsUi
             , playerUi
             , state.dockShapeCompositions
                 |> List.map dockShapeCompositionUi
-                |> Web.Svg.element "g"
+                |> Web.svgElement "g"
                     [ Svg.LocalExtra.scaled (worldSize.width / worldSizeCells.x)
                     ]
                 |> List.singleton
-                |> Web.Svg.element "g"
+                |> Web.svgElement "g"
                     [ Svg.LocalExtra.translated
                         { x = (state.windowSize.width |> Basics.toFloat) / 2
                         , y = (state.windowSize.height |> Basics.toFloat) / 2
@@ -234,7 +225,7 @@ initializedInterface state =
                     ]
             ]
         ]
-        |> Web.Dom.render
+        |> Web.domRender
     ]
         |> Web.interfaceBatch
         |> Web.interfaceFutureMap
@@ -333,14 +324,14 @@ stateWithInitialRandomness ( initialRandomnessInt0, initialRandomnessInt1Up ) =
         }
 
 
-dockShapeCompositionUi : DockShapeComposition -> Web.Dom.Node state_
+dockShapeCompositionUi : DockShapeComposition -> Web.DomNode state_
 dockShapeCompositionUi =
     \dockShapeComposition ->
         dockShapeComposition.shapes
             |> List.map
                 (\shape ->
-                    Web.Svg.element "path"
-                        [ Web.Dom.attribute "d"
+                    Web.svgElement "path"
+                        [ Web.domAttribute "d"
                             (PathD.pathD
                                 (case shape.geometry of
                                     [] ->
@@ -358,7 +349,7 @@ dockShapeCompositionUi =
                         ]
                         []
                 )
-            |> Web.Svg.element "g" []
+            |> Web.svgElement "g" []
 
 
 shapePathSegmentStartPoint : ShapePathSegment -> Point2d Length.Meters Float
