@@ -1,4 +1,4 @@
-module Svg.LocalExtra exposing (circle, ellipse, fillUniform, line, polygon, polyline, rotated, scaled, strokeUniform, strokeWidth, translated)
+module Svg exposing (circle, ellipse, fillUniform, line, polygon, polyline, rotated, scaled, strokeUniform, strokeWidth, translated)
 
 import Angle
 import Color exposing (Color)

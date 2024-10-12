@@ -20,7 +20,7 @@ import Quantity
 import Random.Pcg.Extended
 import RecordWithoutConstructorFunction exposing (RecordWithoutConstructorFunction)
 import Serialize
-import Svg.LocalExtra
+import Svg
 import Svg.PathD as PathD
 import Time
 import Vector2d exposing (Vector2d)
@@ -145,7 +145,7 @@ initializedInterface state =
         worldUi : Web.DomNode state_
         worldUi =
             Web.svgElement "rect"
-                [ Svg.LocalExtra.fillUniform Color.black
+                [ Svg.fillUniform Color.black
                 , Web.domAttribute "width" "100%"
                 , Web.domAttribute "height" "100%"
                 ]
@@ -160,7 +160,7 @@ initializedInterface state =
         controlsUi : Web.DomNode state_
         controlsUi =
             Web.svgElement "text"
-                [ Svg.LocalExtra.fillUniform (Color.rgb 0.3 0.7 0.5)
+                [ Svg.fillUniform (Color.rgb 0.3 0.7 0.5)
                 , Web.domStyle "font-size" "3em"
                 , Web.domAttribute "text-anchor" "middle"
                 , Web.domAttribute "dominant-baseline" "middle"
@@ -214,11 +214,11 @@ initializedInterface state =
             , state.dockShapeCompositions
                 |> List.map dockShapeCompositionUi
                 |> Web.svgElement "g"
-                    [ Svg.LocalExtra.scaled (worldSize.width / worldSizeCells.x)
+                    [ Svg.scaled (worldSize.width / worldSizeCells.x)
                     ]
                 |> List.singleton
                 |> Web.svgElement "g"
-                    [ Svg.LocalExtra.translated
+                    [ Svg.translated
                         { x = (state.windowSize.width |> Basics.toFloat) / 2
                         , y = (state.windowSize.height |> Basics.toFloat) / 2
                         }
@@ -345,7 +345,7 @@ dockShapeCompositionUi =
                                             ++ [ PathD.Z ]
                                 )
                             )
-                        , Svg.LocalExtra.fillUniform shape.color
+                        , Svg.fillUniform shape.color
                         ]
                         []
                 )
