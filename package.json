@@ -1,9 +1,16 @@
 {
+    "private": true,
     "type": "module",
-    "main": "index.js",
-    "dependencies": {
-        "@lue-bird/elm-state-interface-experimental": "^1.0.1",
-        "vite": "^5.1.2",
+    "homepage": "https://lue-bird.github.io/lider/",
+    "scripts": {
+        "predeploy": "vite build",
+        "deploy": "gh-pages -d dist"
+    },
+    "devDependencies": {
+        "@lue-bird/elm-state-interface-experimental": "^1.0.2",
+        "elm-optimize-level-2": "^0.3.5",
+        "gh-pages": "^6.1.1",
+        "vite": "^5.4.8",
         "vite-plugin-elm-watch": "^1.3.2"
     }
 }
